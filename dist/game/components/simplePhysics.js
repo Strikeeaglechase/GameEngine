@@ -4,6 +4,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
+import { EnableRPCs, RPC } from "../../networking/rpc.js";
 import { PartialEmitter } from "../../components/particleEmitter.js";
 import { Component, NetComponent } from "../../entity/component.js";
 import { Vector2 } from "../../utils/vector2.js";
@@ -31,6 +32,8 @@ let SimpleMoverPhysics = class SimpleMoverPhysics extends Component {
         this.decel = decel;
         this.velocity = Vector2.zero;
     }
+    awake() {
+    }
     update(dt) {
         const pos = this.entity.transform.position;
         const vel = this.velocity;
@@ -40,9 +43,20 @@ let SimpleMoverPhysics = class SimpleMoverPhysics extends Component {
         if (emitter) {
             emitter.options.size = Math.max(vel.length() / 10, 1);
         }
+        if (this.entity.isLocal && this.entity.netReady) {
+            this.sync(this.entity.position, this.velocity);
+        }
+    }
+    sync(pos, vel) {
+        this.entity.transform.position.set(pos);
+        this.velocity.set(vel);
     }
 };
+__decorate([
+    RPC("bi", "remote")
+], SimpleMoverPhysics.prototype, "sync", null);
 SimpleMoverPhysics = __decorate([
-    NetComponent
+    NetComponent,
+    EnableRPCs("instance")
 ], SimpleMoverPhysics);
 export { SimpleMoverPhysics, LimitedLifetime };

@@ -25,6 +25,7 @@ class Entity extends EventEmitter {
 	private componentLookup: Map<Ctor<Component>, Component> = new Map();
 	public tags: Set<string> = new Set();
 	public isLocal = true;
+	public netReady = false;
 
 	get x() {
 		return this.transform.position.x;

@@ -1,5 +1,4 @@
 import { GameEngine } from "../engine.js";
-import { BiMap } from "../utils/biMap.js";
 class Component {
     constructor() {
         this.engine = GameEngine.instance;
@@ -12,19 +11,31 @@ class Component {
         // @ts-ignore
         return (_a = this.__orgName) !== null && _a !== void 0 ? _a : this.constructor.name;
     }
+    static getComponentByName(name) {
+        return this.components.find(c => c.__orgName == name);
+    }
+    static getComponentName(ctor) {
+        // @ts-ignore
+        if (ctor instanceof Component)
+            return ctor.constructor.__orgName;
+        // @ts-ignore
+        return ctor.__orgName;
+    }
 }
-Component.components = new BiMap();
+// static components: BiMap<string, Ctor<Component>> = new BiMap();
+Component.components = [];
 function NetComponent(target) {
     let name = target.name;
-    if ("netInfo" in target) {
-        const netInfo = target.netInfo;
-        console.log(`Component ${name} has a netInfo property, so using name ${netInfo.className}`);
-        name = netInfo.className;
+    if ("__name" in target) {
+        const preNetInfoName = target.__name;
+        console.log(`Component ${name} has a __name property, so using name ${target.__name}`);
+        name = preNetInfoName;
+        // console.error(`Component ${target.__name} has been registered as an RPC before registering as a componen. This is not supported.`);
+        // return;
     }
-    if (Component.components.hasKey(name)) {
+    if (Component.getComponentByName(name)) {
         console.error(`Component with name ${name} already exists!`);
     }
-    Component.components.set(name, target);
     target = class extends target {
         constructor(...args) {
             super(...args);
@@ -32,6 +43,8 @@ function NetComponent(target) {
         }
     };
     target.__orgName = name;
+    Component.components.push(target);
+    return target;
 }
 ;
 export { Component, NetComponent };

@@ -6,18 +6,6 @@ import { RoutineManager } from "./routine/routine.js";
 import { EventEmitter } from "./utils/eventEmitter.js";
 import { Vector2 } from "./utils/vector2.js";
 class GameEngine extends EventEmitter {
-    constructor() {
-        super();
-        this.camera = Vector2.zero;
-        this.mouse = Vector2.zero;
-        this.previousFrameTime = Date.now();
-        this.lastFrameTimes = [];
-        this.entities = [];
-        this.keysDown = {};
-        this.mouseButtonsDown = [];
-        this.systems = [];
-        this.debugEntityPos = false;
-    }
     get fps() {
         let sum = 0;
         this.lastFrameTimes.forEach(t => sum += t);
@@ -30,6 +18,18 @@ class GameEngine extends EventEmitter {
         const max = Math.max(...ids);
         if (max >= GameEngine.nextId)
             GameEngine.nextId = max + 1;
+    }
+    constructor() {
+        super();
+        this.camera = Vector2.zero;
+        this.mouse = Vector2.zero;
+        this.previousFrameTime = Date.now();
+        this.lastFrameTimes = [];
+        this.entities = [];
+        this.keysDown = {};
+        this.mouseButtonsDown = [];
+        this.systems = [];
+        this.debugEntityPos = false;
     }
     init(renderTargetId) {
         this.renderer = new Renderer(renderTargetId);

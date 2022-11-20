@@ -23,12 +23,14 @@ class GameServer {
 		RPCController.init((packets) => {
 			const clientPackets = packets.filter(packet => packet.className == clientClass);
 			const broadcastPackets = packets.filter(packet => packet.className != clientClass);
-			this.clients.forEach(c => c.send(broadcastPackets));
-			clientPackets.forEach(packet => {
-				const client = this.getClientById(packet.id);
-				if (client) client.send(packet);
+			if (broadcastPackets.length > 0) this.clients.forEach(c => c.send(broadcastPackets));
+			this.clients.forEach(client => {
+				const thisClientPackets = clientPackets.filter(packet => packet.id == client.id);
+				if (thisClientPackets.length > 0) client.send(thisClientPackets);
 			});
 		});
+
+		RPCController.suppressRPCFindError = true;
 
 		setInterval(() => {
 			RPCController.flush();
