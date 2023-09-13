@@ -12,6 +12,7 @@
 			"DOM.Iterable"
 		],
 		"experimentalDecorators": true,
+		"declaration": true
 	},
 	"include": [
 		"src/"

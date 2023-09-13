@@ -6,6 +6,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 };
 import { PartialEmitter } from "../../components/particleEmitter.js";
 import { Component, NetComponent } from "../../entity/component.js";
+import { EnableRPCs, RPC } from "../../networking/rpc.js";
 import { Vector2 } from "../../utils/vector2.js";
 let LimitedLifetime = class LimitedLifetime extends Component {
     constructor(lifetime) {
@@ -40,9 +41,19 @@ let SimpleMoverPhysics = class SimpleMoverPhysics extends Component {
         if (emitter) {
             emitter.options.size = Math.max(vel.length() / 10, 1);
         }
+        if (this.entity.isLocal)
+            this.syncPhysics(pos, vel);
+    }
+    syncPhysics(position, velocity) {
+        this.entity.transform.position.set(position);
+        this.velocity.set(velocity);
     }
 };
+__decorate([
+    RPC("bi")
+], SimpleMoverPhysics.prototype, "syncPhysics", null);
 SimpleMoverPhysics = __decorate([
+    EnableRPCs("instance"),
     NetComponent
 ], SimpleMoverPhysics);
 export { SimpleMoverPhysics, LimitedLifetime };

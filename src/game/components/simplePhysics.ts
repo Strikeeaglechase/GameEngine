@@ -1,5 +1,6 @@
 import { PartialEmitter } from "../../components/particleEmitter.js";
 import { Component, NetComponent } from "../../entity/component.js";
+import { EnableRPCs, RPC } from "../../networking/rpc.js";
 import { Vector2 } from "../../utils/vector2.js";
 
 @NetComponent
@@ -20,6 +21,7 @@ class LimitedLifetime extends Component {
 	}
 }
 
+@EnableRPCs("instance")
 @NetComponent
 class SimpleMoverPhysics extends Component {
 	public velocity = Vector2.zero;
@@ -36,6 +38,14 @@ class SimpleMoverPhysics extends Component {
 		if (emitter) {
 			emitter.options.size = Math.max(vel.length() / 10, 1);
 		}
+
+		if (this.entity.isLocal) this.syncPhysics(pos, vel);
+	}
+
+	@RPC("bi")
+	private syncPhysics(position: Vector2, velocity: Vector2) {
+		this.entity.transform.position.set(position);
+		this.velocity.set(velocity);
 	}
 }
 
