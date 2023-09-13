@@ -41,9 +41,15 @@ let WSClient = class WSClient {
                     return rpc.className == ignore.className && rpc.method == ignore.method;
                 });
             });
-            const game = this.server.getGameById(this.gameId);
-            if (game)
-                game.broadcastRPCs(broadcast, this);
+            if (broadcast.length > 0) {
+                const game = this.server.getGameById(this.gameId);
+                if (game)
+                    game.broadcastRPCs(broadcast, this);
+                else {
+                    console.log(`Client ${this.id} tried to broadcast RPCs but is not in a game`);
+                    broadcast.forEach(rpc => console.log(rpc.className + "." + rpc.method));
+                }
+            }
         }
         catch (e) {
             console.log(`Error parsing message: ${e}`);

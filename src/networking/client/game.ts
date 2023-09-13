@@ -34,6 +34,7 @@ class Game extends EventEmitter<"client_join" | "client_leave" | "game_close"> {
 
 	@RPC("in")
 	clientLeave(clientId: string) {
+		console.log(`Lobby client leave: ${clientId}`);
 		this.emit("client_leave", clientId);
 		this.players.delete(clientId);
 	}

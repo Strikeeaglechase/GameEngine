@@ -47,6 +47,11 @@ class RPCController {
     }
     registerRPCHandler(constructor, mode, altNames = []) {
         var _a;
+        if ("__orgName" in constructor) {
+            // @ts-ignore
+            // console.log(`RPC has __orgName, using ${constructor.__orgName}`);
+            console.error(`Place the @NetComponent decorator before the @EnableRPCs decorator on ${constructor.__orgName}`);
+        }
         // @ts-ignore
         const name = (_a = constructor.__orgName) !== null && _a !== void 0 ? _a : constructor.name;
         altNames.forEach(altName => this.multiNameLut[altName] = name);
@@ -69,6 +74,8 @@ class RPCController {
                     }
                 }
             };
+            // @ts-ignore
+            constructor.__name = name;
         }
         this.newInRpcs.forEach(rpc => rpc.type = mode);
         console.log(`Registered ${mode} RPCs on ${name}${this.newInRpcs.map(r => `\n\t- ${r.name}`)}`);
@@ -92,14 +99,15 @@ class RPCController {
             return;
         }
     }
-    registerRpc(target, propertyKey, descriptor, direction) {
+    registerRpc(target, propertyKey, descriptor, direction, internalCallMode) {
         const rpcName = propertyKey;
         const targetName = target.constructor.name;
         if (direction == "in" || direction == "bi") {
             this.newInRpcs.push({
                 name: rpcName,
                 target: targetName,
-                type: "static"
+                type: "static",
+                internalCallMode: internalCallMode,
             });
         }
         if (direction == "out" || direction == "bi") {
@@ -107,11 +115,17 @@ class RPCController {
             const defaultFunc = descriptor.value;
             descriptor.value = function (...args) {
                 const netInfo = this.netInfo;
+                if (!netInfo) {
+                    console.error(`RPC ${targetName}#${rpcName} could not find a netInfo, has @EnableRPCs() been called?`);
+                    return;
+                }
                 netInfo.currentMethod = rpcName;
                 if (netInfo.isLocal()) {
                     self.fireRPC(target, rpcName, args, this.id);
                 }
-                return defaultFunc.apply(this, args);
+                if (internalCallMode == "always" || netInfo.isRemote()) {
+                    return defaultFunc.apply(this, args);
+                }
             };
         }
         return descriptor;
@@ -163,8 +177,9 @@ class RPCController {
             }
         }
         catch (e) {
-            console.log(`Error parsing RPC packet: ${e}`);
-            console.log(message);
+            console.error(`Error parsing RPC packet: ${e}`);
+            console.error(e);
+            console.error(message);
         }
         // Check alt name
         const altName = this.instance.multiNameLut[packet.className];
@@ -228,9 +243,9 @@ function EnableRPCs(mode = "singleInstance", altNames) {
         return RPCController.instance.registerRPCHandler(constructor, mode, altNames);
     };
 }
-function RPC(direction = "bi") {
+function RPC(direction = "bi", internalCallMode = "always") {
     return function (target, propertyKey, descriptor) {
-        return RPCController.instance.registerRpc(target, propertyKey, descriptor, direction);
+        return RPCController.instance.registerRpc(target, propertyKey, descriptor, direction, internalCallMode);
     };
 }
 export { RPCController, NetInfo, EnableRPCs, RPC };

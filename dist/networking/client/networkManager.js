@@ -15,12 +15,22 @@ import { EnableRPCs, RPC, RPCController } from "../rpc.js";
 import { Client } from "./client.js";
 import { Game } from "./game.js";
 let NetworkManager = class NetworkManager extends EventEmitter {
+    get isHost() {
+        if (this.game != null) {
+            return this.game.host == this.client.id;
+        }
+        return false;
+    }
+    get game() {
+        if (this.client && this.client.connectedGame)
+            return this.client.connectedGame;
+        return null;
+    }
     constructor(url) {
         super();
         this.url = url;
         this.games = [];
         this.idBuffer = [];
-        this.isHost = false;
         this.ready = false;
         this.cachedInstantiations = [];
         this.networkIdToEntity = new Map();
@@ -62,21 +72,36 @@ let NetworkManager = class NetworkManager extends EventEmitter {
                 else {
                     const newGame = new Game(gameData.id);
                     newGame.updateFromData(gameData);
-                    console.log(`New game created: ${newGame}`);
+                    Logger.info(`New game created: ${newGame}`);
                     this.games.push(newGame);
                     this.emit("new_game", newGame);
                 }
             });
             this.games.forEach(game => {
                 if (!gameDatas.find(gameData => gameData.id == game.id)) {
-                    console.log(`Game closed: ${game}`);
+                    Logger.info(`Game closed: ${game}`);
                     this.emit("game_closed", game);
                 }
             });
             this.games = this.games.filter(game => gameDatas.find(gameData => gameData.id == game.id));
         });
+        this.client.on("join_game_result", (result) => {
+            if (result)
+                Routine.startCoroutine(this.setupGame());
+        });
         this.emit("ready");
         this.ready = true;
+    }
+    *setupGame() {
+        Logger.info(`Waiting for game info to populate`);
+        yield Routine.waitUntil(() => this.game != null);
+        Logger.info(`Game info received ${this.isHost ? "(host)" : "(client)"}`);
+        if (this.isHost) {
+            this.game.on("client_leave", (clientId) => {
+                this.destroyClientEntities(clientId);
+            });
+        }
+        this.requestResync();
     }
     getGameById(id) {
         return this.games.find((game) => game.id == id);
@@ -86,37 +111,51 @@ let NetworkManager = class NetworkManager extends EventEmitter {
     }
     update(dt) {
         RPCController.flush();
-        if (this.client && this.client.connectedGame) {
-            this.isHost = this.client.connectedGame.host == this.client.id;
-        }
     }
-    netInstantiate(entityNetworkId, components, directedClient) {
+    destroyClientEntities(clientId) {
+        const netEntities = GameEngine.instance.getEntitiesWithComponent(NetEntity);
+        netEntities.forEach(netEntity => {
+            const netComp = netEntity.getComponent(NetEntity);
+            if (netComp.ownerId == clientId) {
+                netEntity.destroy();
+                this.netDestroy(netComp.entityNetworkId);
+            }
+        });
+    }
+    netInstantiate(entityNetworkId, ownerId, components, directedClient) {
+        if (this.isHost && !this.cachedInstantiations.some(i => i.entityNetworkId == entityNetworkId)) {
+            console.log(`Cached new instantiation for ${entityNetworkId} (${ownerId})`);
+            this.cachedInstantiations.push({ entityNetworkId, components, ownerId });
+        }
         if (this.netInfo.isLocal() || (directedClient && directedClient != this.client.id))
             return;
-        if (this.isHost) {
-            this.cachedInstantiations.push({ entityNetworkId, components });
-        }
-        console.log(`Instantiating entity ${entityNetworkId} with components ${components.map(c => c.component).join(", ")}`);
+        Logger.info(`Instantiating entity ${entityNetworkId} with components`);
         const entity = new Entity();
         entity.isLocal = false;
         components.forEach(info => {
-            const ctor = Component.components.getByKey(info.component);
+            const ctor = Component.getComponentByName(info.component);
+            if (!ctor) {
+                Logger.error(`Component ${info.component} not found`);
+                return;
+            }
             const component = new ctor(...info.args);
             component.id = info.id;
             entity.addComponent(component);
         });
         const netEntity = entity.getComponent(NetEntity);
         netEntity.entityNetworkId = entityNetworkId;
+        netEntity.ownerId = ownerId;
+        GameEngine.instance.entities.push(entity);
         entity.awake();
     }
     netDestroy(netEntityId) {
         if (!netEntityId) {
-            console.error("NetEntityId is null for netDestroy");
+            Logger.error("NetEntityId is null for netDestroy");
             return;
         }
         const entity = this.getEntityByNetworkId(netEntityId);
         if (!entity) {
-            console.warn(`Entity with network id ${netEntityId} not found`);
+            Logger.warn(`Entity with network id ${netEntityId} not found`);
             return;
         }
         const netEntity = entity.getComponent(NetEntity);
@@ -134,7 +173,7 @@ let NetworkManager = class NetworkManager extends EventEmitter {
         const entities = GameEngine.instance.getEntitiesWithComponent(NetEntity);
         const entity = entities.find(e => e.getComponent(NetEntity).entityNetworkId == id);
         if (!entity) {
-            console.error(`Unable to find entity with network id ${id}`);
+            Logger.error(`Unable to find entity with network id ${id}`);
             return;
         }
         this.networkIdToEntity.set(id, entity);
@@ -144,31 +183,26 @@ let NetworkManager = class NetworkManager extends EventEmitter {
         const netEntityComponent = entity.getComponent(NetEntity);
         const reqIdCount = entity.components.length + 1;
         this.requestIds(reqIdCount);
-        yield Routine.waitUntil(() => {
-            // console.log(`Waiting for ${reqIdCount} ids (${this.idBuffer.length})`);
-            return this.idBuffer.length >= reqIdCount;
-        });
-        console.log(this.idBuffer, reqIdCount);
+        yield Routine.waitUntil(() => this.idBuffer.length >= reqIdCount);
         const ids = this.idBuffer.splice(0, reqIdCount);
         netEntityComponent.entityNetworkId = ids[0];
         const components = entity.components.map((c, idx) => {
             c.id = ids[idx + 1];
-            if (!Component.components.hasValue(c.constructor)) {
-                console.error(`Component ${c} has not registered as a NetComponent`);
+            const componentName = Component.getComponentName(c);
+            if (!componentName) {
+                Logger.error(`Component ${c} has not registered as a NetComponent (no __orgName)`);
                 return null;
             }
-            console.log(c);
             if (!c.__netInitArgs) {
-                console.error(`Component ${c} has not assigned __netInitArgs`);
+                Logger.error(`Component ${c} has not assigned __netInitArgs`);
             }
-            const component = Component.components.getByValue(c.constructor);
             return {
-                component: component,
+                component: componentName,
                 args: c.__netInitArgs,
                 id: c.id
             };
         });
-        this.netInstantiate(netEntityComponent.entityNetworkId, components);
+        this.netInstantiate(netEntityComponent.entityNetworkId, this.client.id, components);
     }
     requestIds(count) {
         var _a;
@@ -188,10 +222,15 @@ let NetworkManager = class NetworkManager extends EventEmitter {
     }
     requestResync() {
         if (this.isHost) {
+            Logger.info(`Client ${this.netInfo.callerId} requested resync`);
             this.cachedInstantiations.forEach(info => {
-                this.netInstantiate(info.entityNetworkId, info.components, this.netInfo.callerId);
+                this.netInstantiate(info.entityNetworkId, info.ownerId, info.components, this.netInfo.callerId);
             });
+            this.requestClientEntityResync(this.netInfo.callerId);
         }
+    }
+    requestClientEntityResync(clientId) {
+        this.emit("client_resync", clientId);
     }
 };
 __decorate([
@@ -207,8 +246,11 @@ __decorate([
     RPC("bi")
 ], NetworkManager.prototype, "giveIds", null);
 __decorate([
-    RPC("bi")
+    RPC("bi", "remote")
 ], NetworkManager.prototype, "requestResync", null);
+__decorate([
+    RPC("bi")
+], NetworkManager.prototype, "requestClientEntityResync", null);
 NetworkManager = __decorate([
     EnableRPCs("singleInstance")
 ], NetworkManager);

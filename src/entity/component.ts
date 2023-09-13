@@ -22,22 +22,35 @@ abstract class Component {
 		return this.__orgName ?? this.constructor.name;
 	}
 
-	static components: BiMap<string, Ctor<Component>> = new BiMap();
+	// static components: BiMap<string, Ctor<Component>> = new BiMap();
+	static components: (Ctor<Component> & { __orgName: string; })[] = [];
+
+	public static getComponentByName(name: string) {
+		return this.components.find(c => c.__orgName == name);
+	}
+
+	public static getComponentName(ctor: Ctor<Component> | Component): string {
+		// @ts-ignore
+		if (ctor instanceof Component) return ctor.constructor.__orgName;
+		// @ts-ignore
+		return ctor.__orgName;
+	}
 }
 
 function NetComponent(target: any) {
 	let name = target.name;
-	if ("netInfo" in target) {
-		const netInfo = target.netInfo as NetInfo;
-		console.log(`Component ${name} has a netInfo property, so using name ${netInfo.className}`);
-		name = netInfo.className;
+	if ("__name" in target) {
+		const preNetInfoName = target.__name;
+		console.log(`Component ${name} has a __name property, so using name ${target.__name}`);
+		name = preNetInfoName;
+		// console.error(`Component ${target.__name} has been registered as an RPC before registering as a componen. This is not supported.`);
+		// return;
 	}
 
-	if (Component.components.hasKey(name)) {
+	if (Component.getComponentByName(name)) {
 		console.error(`Component with name ${name} already exists!`);
 	}
 
-	Component.components.set(name, target);
 
 
 	target = class extends target {
@@ -47,6 +60,8 @@ function NetComponent(target: any) {
 		}
 	};
 	target.__orgName = name;
+	Component.components.push(target);
+	return target;
 };
 
 export { Component, NetComponent };

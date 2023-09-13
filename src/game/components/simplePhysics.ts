@@ -1,7 +1,7 @@
 import { PartialEmitter } from "../../components/particleEmitter.js";
 import { Component, NetComponent } from "../../entity/component.js";
 import { EnableRPCs, RPC } from "../../networking/rpc.js";
-import { Vector2 } from "../../utils/vector2.js";
+import { IVector2, Vector2 } from "../../utils/vector2.js";
 
 @NetComponent
 class LimitedLifetime extends Component {
@@ -23,10 +23,14 @@ class LimitedLifetime extends Component {
 
 @EnableRPCs("instance")
 @NetComponent
+@EnableRPCs("instance")
 class SimpleMoverPhysics extends Component {
 	public velocity = Vector2.zero;
 
 	constructor(public decel: number) { super(); }
+
+	public override awake(): void {
+	}
 
 	public override update(dt: number): void {
 		const pos = this.entity.transform.position;
@@ -39,13 +43,15 @@ class SimpleMoverPhysics extends Component {
 			emitter.options.size = Math.max(vel.length() / 10, 1);
 		}
 
-		if (this.entity.isLocal) this.syncPhysics(pos, vel);
+		if (this.entity.isLocal && this.entity.netReady) {
+			this.sync(this.entity.position, this.velocity);
+		}
 	}
 
-	@RPC("bi")
-	private syncPhysics(position: Vector2, velocity: Vector2) {
-		this.entity.transform.position.set(position);
-		this.velocity.set(velocity);
+	@RPC("bi", "remote")
+	private sync(pos: IVector2, vel: IVector2) {
+		this.entity.transform.position.set(pos);
+		this.velocity.set(vel);
 	}
 }
 

@@ -2,21 +2,6 @@ import { GameEngine } from "../engine.js";
 import { EventEmitter } from "../utils/eventEmitter.js";
 import { Vector2 } from "../utils/vector2.js";
 class Entity extends EventEmitter {
-    constructor() {
-        super();
-        this.transform = {
-            position: Vector2.zero,
-            rotation: 0,
-            width: 0,
-            height: 0
-        };
-        this.isActive = false;
-        this.components = [];
-        this.componentLookup = new Map();
-        this.tags = new Set();
-        this.isLocal = true;
-        this.id = GameEngine.getNextId();
-    }
     get x() {
         return this.transform.position.x;
     }
@@ -49,6 +34,22 @@ class Entity extends EventEmitter {
     }
     set rotation(value) {
         this.transform.rotation = value;
+    }
+    constructor() {
+        super();
+        this.transform = {
+            position: Vector2.zero,
+            rotation: 0,
+            width: 0,
+            height: 0
+        };
+        this.isActive = false;
+        this.components = [];
+        this.componentLookup = new Map();
+        this.tags = new Set();
+        this.isLocal = true;
+        this.netReady = false;
+        this.id = GameEngine.getNextId();
     }
     awake() {
         this.isActive = true;

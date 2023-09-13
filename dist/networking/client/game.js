@@ -28,6 +28,7 @@ let Game = class Game extends EventEmitter {
         this.players.add(clientId);
     }
     clientLeave(clientId) {
+        console.log(`Lobby client leave: ${clientId}`);
         this.emit("client_leave", clientId);
         this.players.delete(clientId);
     }
